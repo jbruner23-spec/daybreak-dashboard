@@ -525,6 +525,74 @@
             border-top: 2px solid #00ffa3;
         }
 
+        /* Entry Price mini-tables inside Performance tab */
+        .ep-tables-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            margin-top: 10px;
+        }
+        .ep-table-wrap {
+            background: #0a0a0f;
+            border: 1px solid #1e1e2e;
+            border-radius: 6px;
+            overflow: hidden;
+        }
+        .ep-table-header {
+            padding: 8px 12px;
+            font-size: 12px;
+            font-weight: bold;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: #00ffa3;
+            border-bottom: 1px solid #1e1e2e;
+        }
+        .ep-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .ep-table th {
+            background: #0f0f17;
+            padding: 6px 8px;
+            text-align: center;
+            font-size: 9px;
+            font-weight: bold;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: #888;
+            border-bottom: 1px solid #1e1e2e;
+        }
+        .ep-table th:first-child { text-align: left; }
+        .ep-table td {
+            padding: 5px 8px;
+            border-bottom: 1px solid #1e1e2e;
+            font-size: 11px;
+            text-align: center;
+        }
+        .ep-table td:first-child { text-align: left; color: #888; }
+        .ep-table tbody tr:nth-child(even) { background: #0f0f17; }
+        .ep-table tbody tr:hover { background: #1a1a2e; }
+        .ep-table tfoot td {
+            background: #1a1a2e;
+            font-weight: bold;
+            border-top: 2px solid #00ffa3;
+            font-size: 11px;
+        }
+        .ep-callout {
+            display: inline-block;
+            background: #0a0a0f;
+            border: 1px solid #1e1e2e;
+            border-radius: 6px;
+            padding: 8px 14px;
+            font-size: 11px;
+            margin-right: 10px;
+            margin-bottom: 5px;
+        }
+
+        @media (max-width: 768px) {
+            .ep-tables-grid { grid-template-columns: 1fr; }
+        }
+
         .size-chart-row {
             display: grid;
             grid-template-columns: 1fr 1fr;
@@ -669,9 +737,27 @@
                     <div class="chart-title">Win/Loss</div>
                     <canvas id="winLossChart"></canvas>
                 </div>
-                <div class="chart-container" style="height: 350px;">
-                    <div class="chart-title">P&L by Market</div>
-                    <canvas id="pnlByMarketChart"></canvas>
+                <div class="chart-container" style="min-height: 350px; height: auto;">
+                    <div class="chart-title">WR & PNL by Entry Price (¢0.48–0.54)</div>
+                    <div class="ep-tables-grid">
+                        <div class="ep-table-wrap">
+                            <div class="ep-table-header">5m Executor</div>
+                            <table class="ep-table" id="epTable5m">
+                                <thead><tr><th>Entry ¢</th><th>Trades</th><th>WR</th><th>PNL</th><th>Avg PNL</th></tr></thead>
+                                <tbody></tbody>
+                                <tfoot><tr id="epTotal5m"></tr></tfoot>
+                            </table>
+                        </div>
+                        <div class="ep-table-wrap">
+                            <div class="ep-table-header" style="color:#ffb347;">15m Executor</div>
+                            <table class="ep-table" id="epTable15m">
+                                <thead><tr><th>Entry ¢</th><th>Trades</th><th>WR</th><th>PNL</th><th>Avg PNL</th></tr></thead>
+                                <tbody></tbody>
+                                <tfoot><tr id="epTotal15m"></tr></tfoot>
+                            </table>
+                        </div>
+                    </div>
+                    <div id="epCallouts" style="margin-top:10px;"></div>
                 </div>
             </div>
 
@@ -851,7 +937,7 @@
                 return result;
             }
             const headers = parseLine(lines[0]);
-            const keep = ['executor','entry_time','market_title','timeframe_min','flip_pair','is_win','realized_pnl','roi_pct','slippage_pct','trade_size','zone','entry_window_pct','hour_et','day_of_week','is_weekend','momentum_state','momentum_contra'];
+            const keep = ['executor','entry_time','market_title','timeframe_min','flip_pair','is_win','realized_pnl','roi_pct','slippage_pct','trade_size','zone','entry_window_pct','hour_et','day_of_week','is_weekend','momentum_state','momentum_contra','entry_price','fill_price','entry_prob'];
             return lines.slice(1).map(line => {
                 const vals = parseLine(line);
                 const obj = {};
@@ -1645,6 +1731,95 @@
             document.getElementById('sizeCallouts').innerHTML = callouts.join('');
         }
 
+        // ============ ENTRY PRICE ANALYSIS (penny bands) ============
+        const EP_BANDS = [];
+        for (let c = 48; c < 54; c++) {
+            EP_BANDS.push({ label: `¢${c}-${c+1}`, min: c / 100, max: (c + 1) / 100 });
+        }
+
+        function getEntryPrice(t) {
+            // Try multiple possible field names
+            const raw = t.entry_price || t.fill_price || t.entry_prob;
+            if (raw !== undefined && raw !== '') return parseFloat(raw);
+            return null;
+        }
+
+        function computeEpBuckets(trades) {
+            return EP_BANDS.map(b => {
+                const bucket = { label: b.label, trades: 0, wins: 0, pnl: 0 };
+                trades.forEach(t => {
+                    const ep = getEntryPrice(t);
+                    if (ep === null) return;
+                    if (ep >= b.min && ep < b.max) {
+                        bucket.trades++;
+                        if (t.is_win === 'TRUE') bucket.wins++;
+                        bucket.pnl += parseFloat(t.realized_pnl) || 0;
+                    }
+                });
+                bucket.wr = bucket.trades > 0 ? (bucket.wins / bucket.trades * 100) : 0;
+                bucket.avgPnl = bucket.trades > 0 ? bucket.pnl / bucket.trades : 0;
+                return bucket;
+            });
+        }
+
+        function renderEpTable(tableId, totalId, buckets) {
+            const tbody = document.querySelector(`#${tableId} tbody`);
+            const tfoot = document.getElementById(totalId);
+            let totalTrades = 0, totalWins = 0, totalPnl = 0;
+            let rows = '';
+            buckets.forEach(b => {
+                totalTrades += b.trades;
+                totalWins += b.wins;
+                totalPnl += b.pnl;
+                if (b.trades === 0) {
+                    rows += `<tr><td>${b.label}</td><td>0</td><td style="color:#555">—</td><td style="color:#555">—</td><td style="color:#555">—</td></tr>`;
+                    return;
+                }
+                const wrColor = b.wr >= 55 ? '#00ffa3' : b.wr >= 45 ? '#ffb347' : '#ff4757';
+                const pnlColor = b.pnl >= 0 ? '#00ffa3' : '#ff4757';
+                rows += `<tr>
+                    <td>${b.label}</td>
+                    <td>${b.trades}</td>
+                    <td style="color:${wrColor}">${b.wr.toFixed(1)}%</td>
+                    <td style="color:${pnlColor}">${b.pnl >= 0 ? '+' : ''}$${b.pnl.toFixed(2)}</td>
+                    <td style="color:${b.avgPnl >= 0 ? '#00ffa3' : '#ff4757'}">${b.avgPnl >= 0 ? '+' : ''}$${b.avgPnl.toFixed(3)}</td>
+                </tr>`;
+            });
+            tbody.innerHTML = rows;
+            const totWr = totalTrades > 0 ? (totalWins / totalTrades * 100) : 0;
+            const totAvg = totalTrades > 0 ? totalPnl / totalTrades : 0;
+            tfoot.innerHTML = `
+                <td><strong>Total</strong></td>
+                <td><strong>${totalTrades}</strong></td>
+                <td><strong>${totWr.toFixed(1)}%</strong></td>
+                <td style="color:${totalPnl >= 0 ? '#00ffa3' : '#ff4757'}"><strong>${totalPnl >= 0 ? '+' : ''}$${totalPnl.toFixed(2)}</strong></td>
+                <td style="color:${totAvg >= 0 ? '#00ffa3' : '#ff4757'}"><strong>${totAvg >= 0 ? '+' : ''}$${totAvg.toFixed(3)}</strong></td>`;
+        }
+
+        function updateEntryPriceAnalysis() {
+            const trades5m = displayedTrades.filter(t => t.executor === '5m');
+            const trades15m = displayedTrades.filter(t => t.executor === '15m');
+            const buckets5m = computeEpBuckets(trades5m);
+            const buckets15m = computeEpBuckets(trades15m);
+
+            renderEpTable('epTable5m', 'epTotal5m', buckets5m);
+            renderEpTable('epTable15m', 'epTotal15m', buckets15m);
+
+            // Callouts
+            const all = [...buckets5m.map(b => ({...b, exec: '5m'})), ...buckets15m.map(b => ({...b, exec: '15m'}))];
+            const active = all.filter(b => b.trades >= 2);
+            const callouts = [];
+            if (active.length > 0) {
+                const best = active.reduce((a, b) => b.wr > a.wr ? b : a);
+                callouts.push(`<span class="ep-callout" style="border-left:3px solid #00ffa3;"><strong>Best:</strong> ${best.exec} ${best.label} ${best.wr.toFixed(0)}% WR</span>`);
+                const worst = active.reduce((a, b) => b.wr < a.wr ? b : a);
+                if (worst.wr < 50) callouts.push(`<span class="ep-callout" style="border-left:3px solid #ff4757;"><strong>Weak:</strong> ${worst.exec} ${worst.label} ${worst.wr.toFixed(0)}% WR</span>`);
+            } else {
+                callouts.push(`<span class="ep-callout" style="border-left:3px solid #ffb347;"><strong>Note:</strong> No entry_price field found — add it to your sheet for penny-level analysis</span>`);
+            }
+            document.getElementById('epCallouts').innerHTML = callouts.join('');
+        }
+
         function setupSizeHorizonButtons() {
             document.querySelectorAll('.size-hz-btn').forEach(btn => {
                 btn.addEventListener('click', () => {
@@ -1772,7 +1947,7 @@
             updateStatCards();
             updateEquityCurve();
             updateWinLossChart();
-            updatePnlByMarket();
+            updateEntryPriceAnalysis();
             updateTradeLog();
             updateHourlyHeatmap();
             updateDayOfWeekChart();
