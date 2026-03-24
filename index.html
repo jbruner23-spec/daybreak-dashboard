@@ -525,6 +525,33 @@
             border-top: 2px solid #00ffa3;
         }
 
+        /* Entry Price toggle */
+        .ep-toggle {
+            display: flex;
+            gap: 4px;
+            background: #0a0a0f;
+            border: 1px solid #1e1e2e;
+            border-radius: 6px;
+            padding: 2px;
+        }
+        .ep-tog-btn {
+            background: transparent;
+            border: none;
+            color: #888;
+            font-family: inherit;
+            font-size: 11px;
+            padding: 5px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .ep-tog-btn.active {
+            background: #00ffa3;
+            color: #0a0a0f;
+            font-weight: bold;
+        }
+        .ep-tog-btn:hover:not(.active) { color: #e0e0e0; }
+
         /* Entry Price mini-tables inside Performance tab */
         .ep-tables-grid {
             display: grid;
@@ -738,12 +765,18 @@
                     <canvas id="winLossChart"></canvas>
                 </div>
                 <div class="chart-container" style="min-height: 350px; height: auto;">
-                    <div class="chart-title">WR & PNL by Entry Price (¢0.48–0.54)</div>
+                    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;">
+                        <div class="chart-title" style="margin:0;" id="epTitle">WR & PNL by Entry Price (¢48–54)</div>
+                        <div class="ep-toggle">
+                            <button class="ep-tog-btn active" data-epmode="entry">Entry Price</button>
+                            <button class="ep-tog-btn" data-epmode="signal">Signal Price</button>
+                        </div>
+                    </div>
                     <div class="ep-tables-grid">
                         <div class="ep-table-wrap">
                             <div class="ep-table-header">5m Executor</div>
                             <table class="ep-table" id="epTable5m">
-                                <thead><tr><th>Entry ¢</th><th>Trades</th><th>WR</th><th>PNL</th><th>Avg PNL</th></tr></thead>
+                                <thead><tr><th>Price ¢</th><th>Trades</th><th>WR</th><th>PNL</th><th>Avg PNL</th></tr></thead>
                                 <tbody></tbody>
                                 <tfoot><tr id="epTotal5m"></tr></tfoot>
                             </table>
@@ -751,7 +784,7 @@
                         <div class="ep-table-wrap">
                             <div class="ep-table-header" style="color:#ffb347;">15m Executor</div>
                             <table class="ep-table" id="epTable15m">
-                                <thead><tr><th>Entry ¢</th><th>Trades</th><th>WR</th><th>PNL</th><th>Avg PNL</th></tr></thead>
+                                <thead><tr><th>Price ¢</th><th>Trades</th><th>WR</th><th>PNL</th><th>Avg PNL</th></tr></thead>
                                 <tbody></tbody>
                                 <tfoot><tr id="epTotal15m"></tr></tfoot>
                             </table>
@@ -937,7 +970,7 @@
                 return result;
             }
             const headers = parseLine(lines[0]);
-            const keep = ['executor','entry_time','market_title','timeframe_min','flip_pair','is_win','realized_pnl','roi_pct','slippage_pct','trade_size','zone','entry_window_pct','hour_et','day_of_week','is_weekend','momentum_state','momentum_contra','entry_price','fill_price','entry_prob'];
+            const keep = ['executor','entry_time','market_title','timeframe_min','flip_pair','is_win','realized_pnl','roi_pct','slippage_pct','trade_size','zone','entry_window_pct','hour_et','day_of_week','is_weekend','momentum_state','momentum_contra','entry_price','signal_price','onchain_avg_price'];
             return lines.slice(1).map(line => {
                 const vals = parseLine(line);
                 const obj = {};
@@ -1731,26 +1764,45 @@
             document.getElementById('sizeCallouts').innerHTML = callouts.join('');
         }
 
-        // ============ ENTRY PRICE ANALYSIS (penny bands) ============
-        const EP_BANDS = [];
-        for (let c = 48; c < 54; c++) {
-            EP_BANDS.push({ label: `¢${c}-${c+1}`, min: c / 100, max: (c + 1) / 100 });
-        }
+        // ============ ENTRY / SIGNAL PRICE ANALYSIS (penny bands) ============
+        let currentEpMode = 'entry'; // 'entry' or 'signal'
 
-        function getEntryPrice(t) {
-            // Try multiple possible field names
-            const raw = t.entry_price || t.fill_price || t.entry_prob;
-            if (raw !== undefined && raw !== '') return parseFloat(raw);
+        function buildPennyBands() {
+            const bands = [{ label: '<¢48', min: 0, max: 0.48 }];
+            for (let c = 48; c < 54; c++) {
+                bands.push({ label: `¢${c}`, min: c / 100, max: (c + 1) / 100 });
+            }
+            bands.push({ label: '≥¢54', min: 0.54, max: 2 });
+            return bands;
+        }
+        const EP_BANDS = buildPennyBands();
+
+        function getPriceField(t, mode) {
+            if (mode === 'signal') {
+                const v = parseFloat(t.signal_price);
+                if (!isNaN(v) && v > 0) return v;
+            } else {
+                const v = parseFloat(t.entry_price);
+                if (!isNaN(v) && v > 0) return v;
+            }
+            // Fallback: derive from zone midpoint (e.g. "0.50-0.52" → 0.51)
+            if (t.zone) {
+                const parts = t.zone.split('-');
+                if (parts.length === 2) {
+                    const mid = (parseFloat(parts[0]) + parseFloat(parts[1])) / 2;
+                    if (!isNaN(mid)) return mid;
+                }
+            }
             return null;
         }
 
-        function computeEpBuckets(trades) {
+        function computeEpBuckets(trades, mode) {
             return EP_BANDS.map(b => {
                 const bucket = { label: b.label, trades: 0, wins: 0, pnl: 0 };
                 trades.forEach(t => {
-                    const ep = getEntryPrice(t);
-                    if (ep === null) return;
-                    if (ep >= b.min && ep < b.max) {
+                    const p = getPriceField(t, mode);
+                    if (p === null) return;
+                    if (p >= b.min && p < b.max) {
                         bucket.trades++;
                         if (t.is_win === 'TRUE') bucket.wins++;
                         bucket.pnl += parseFloat(t.realized_pnl) || 0;
@@ -1797,10 +1849,14 @@
         }
 
         function updateEntryPriceAnalysis() {
+            const mode = currentEpMode;
+            const label = mode === 'signal' ? 'Signal Price' : 'Entry Price';
+            document.getElementById('epTitle').textContent = `WR & PNL by ${label} (¢48–54)`;
+
             const trades5m = displayedTrades.filter(t => t.executor === '5m');
             const trades15m = displayedTrades.filter(t => t.executor === '15m');
-            const buckets5m = computeEpBuckets(trades5m);
-            const buckets15m = computeEpBuckets(trades15m);
+            const buckets5m = computeEpBuckets(trades5m, mode);
+            const buckets15m = computeEpBuckets(trades15m, mode);
 
             renderEpTable('epTable5m', 'epTotal5m', buckets5m);
             renderEpTable('epTable15m', 'epTotal15m', buckets15m);
@@ -1811,13 +1867,24 @@
             const callouts = [];
             if (active.length > 0) {
                 const best = active.reduce((a, b) => b.wr > a.wr ? b : a);
-                callouts.push(`<span class="ep-callout" style="border-left:3px solid #00ffa3;"><strong>Best:</strong> ${best.exec} ${best.label} ${best.wr.toFixed(0)}% WR</span>`);
+                callouts.push(`<span class="ep-callout" style="border-left:3px solid #00ffa3;"><strong>Best:</strong> ${best.exec} ${best.label} ${best.wr.toFixed(0)}% WR (${best.trades} trades)</span>`);
                 const worst = active.reduce((a, b) => b.wr < a.wr ? b : a);
-                if (worst.wr < 50) callouts.push(`<span class="ep-callout" style="border-left:3px solid #ff4757;"><strong>Weak:</strong> ${worst.exec} ${worst.label} ${worst.wr.toFixed(0)}% WR</span>`);
-            } else {
-                callouts.push(`<span class="ep-callout" style="border-left:3px solid #ffb347;"><strong>Note:</strong> No entry_price field found — add it to your sheet for penny-level analysis</span>`);
+                if (worst.wr < 50) callouts.push(`<span class="ep-callout" style="border-left:3px solid #ff4757;"><strong>Weak:</strong> ${worst.exec} ${worst.label} ${worst.wr.toFixed(0)}% WR (${worst.trades} trades)</span>`);
+                const bestPnl = active.reduce((a, b) => b.pnl > a.pnl ? b : a);
+                callouts.push(`<span class="ep-callout" style="border-left:3px solid #00ffa3;"><strong>Top PNL:</strong> ${bestPnl.exec} ${bestPnl.label} +$${bestPnl.pnl.toFixed(2)}</span>`);
             }
             document.getElementById('epCallouts').innerHTML = callouts.join('');
+        }
+
+        function setupEpToggle() {
+            document.querySelectorAll('.ep-tog-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    document.querySelectorAll('.ep-tog-btn').forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
+                    currentEpMode = btn.dataset.epmode;
+                    updateEntryPriceAnalysis();
+                });
+            });
         }
 
         function setupSizeHorizonButtons() {
@@ -2003,6 +2070,7 @@
             setupTabs();
             setupTableSorting();
             setupSizeHorizonButtons();
+            setupEpToggle();
 
             // Auto-refresh every 5 minutes
             setInterval(async () => {
