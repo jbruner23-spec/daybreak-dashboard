@@ -426,6 +426,142 @@
             color: #ff4d6a;
         }
 
+        /* SIZE ANALYSIS TAB */
+        .size-analysis-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .size-analysis-title {
+            font-size: 16px;
+            font-weight: bold;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            color: #00ffa3;
+        }
+
+        .size-horizon-btns {
+            display: flex;
+            gap: 8px;
+        }
+
+        .size-hz-btn {
+            padding: 8px 14px;
+            border: none;
+            border-radius: 4px;
+            background: #1e1e2e;
+            color: #888;
+            cursor: pointer;
+            font-family: inherit;
+            font-size: 11px;
+            font-weight: bold;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            transition: all 0.2s ease;
+        }
+
+        .size-hz-btn:hover { background: #252530; }
+        .size-hz-btn.active { background: #00ffa3; color: #0a0a0f; }
+
+        .size-tables-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .size-table-wrap {
+            background: #12121a;
+            border: 1px solid #1e1e2e;
+            border-radius: 8px;
+            padding: 20px;
+        }
+
+        .size-table-header {
+            font-size: 14px;
+            font-weight: bold;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: #00ffa3;
+            margin-bottom: 15px;
+        }
+
+        .size-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .size-table th {
+            background: #0f0f17;
+            padding: 10px 12px;
+            text-align: center;
+            font-size: 10px;
+            font-weight: bold;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: #888;
+            border-bottom: 1px solid #1e1e2e;
+        }
+
+        .size-table th:first-child { text-align: left; }
+
+        .size-table td {
+            padding: 10px 12px;
+            border-bottom: 1px solid #1e1e2e;
+            font-size: 12px;
+            text-align: center;
+        }
+
+        .size-table td:first-child { text-align: left; color: #888; }
+
+        .size-table tbody tr:nth-child(even) { background: #0f0f17; }
+        .size-table tbody tr:hover { background: #1a1a2e; }
+
+        .size-table tfoot td {
+            background: #1a1a2e;
+            font-weight: bold;
+            border-top: 2px solid #00ffa3;
+        }
+
+        .size-chart-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .size-callouts {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 15px;
+        }
+
+        .size-callout {
+            background: #12121a;
+            border: 1px solid #1e1e2e;
+            border-radius: 8px;
+            padding: 15px 20px;
+            border-left: 3px solid #00ffa3;
+        }
+
+        .size-callout.negative { border-left-color: #ff4d6a; }
+
+        .size-callout-title {
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: #888;
+            margin-bottom: 5px;
+        }
+
+        .size-callout-value {
+            font-size: 14px;
+            font-weight: bold;
+            color: #e0e0e0;
+        }
+
         @media (max-width: 768px) {
             .stat-cards {
                 grid-template-columns: 1fr;
@@ -445,6 +581,16 @@
 
             td, th {
                 padding: 8px 10px;
+            }
+
+            .size-tables-grid, .size-chart-row {
+                grid-template-columns: 1fr;
+            }
+
+            .size-analysis-header {
+                flex-direction: column;
+                gap: 10px;
+                align-items: flex-start;
             }
         }
     </style>
@@ -482,6 +628,7 @@
 
         <div class="tabs">
             <button class="tab-btn active" data-tab="performance">Performance</button>
+            <button class="tab-btn" data-tab="sizeanalysis">Size Analysis</button>
             <button class="tab-btn" data-tab="analysis">Trends & Analysis</button>
         </div>
     </header>
@@ -550,6 +697,69 @@
                     </table>
                 </div>
             </div>
+        </div>
+
+        <!-- SIZE ANALYSIS TAB -->
+        <div id="sizeanalysis" class="tab-content">
+            <div class="size-analysis-header">
+                <div class="size-analysis-title">Win Rate & PNL by Order Size</div>
+                <div class="size-horizon-btns">
+                    <button class="size-hz-btn active" data-hz="all">All-Time</button>
+                    <button class="size-hz-btn" data-hz="8h">8hr</button>
+                    <button class="size-hz-btn" data-hz="24h">24hr</button>
+                    <button class="size-hz-btn" data-hz="48h">48hr</button>
+                </div>
+            </div>
+
+            <div class="size-tables-grid">
+                <div class="size-table-wrap">
+                    <div class="size-table-header">5m Executor</div>
+                    <table class="size-table" id="sizeTable5m">
+                        <thead>
+                            <tr>
+                                <th>Size</th>
+                                <th>Trades</th>
+                                <th>WR</th>
+                                <th>PNL</th>
+                                <th>Avg PNL</th>
+                                <th>PNL/$ Risked</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                        <tfoot><tr id="sizeTotal5m"></tr></tfoot>
+                    </table>
+                </div>
+                <div class="size-table-wrap">
+                    <div class="size-table-header" style="color:#ffb347;">15m Executor</div>
+                    <table class="size-table" id="sizeTable15m">
+                        <thead>
+                            <tr>
+                                <th>Size</th>
+                                <th>Trades</th>
+                                <th>WR</th>
+                                <th>PNL</th>
+                                <th>Avg PNL</th>
+                                <th>PNL/$ Risked</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                        <tfoot><tr id="sizeTotal15m"></tr></tfoot>
+                    </table>
+                </div>
+            </div>
+
+            <div class="size-chart-row">
+                <div class="chart-container" style="height:350px;">
+                    <div class="chart-title">Win Rate by Size Bucket</div>
+                    <canvas id="sizeWrChart"></canvas>
+                </div>
+                <div class="chart-container" style="height:350px;">
+                    <div class="chart-title">Total PNL by Size Bucket</div>
+                    <canvas id="sizePnlChart"></canvas>
+                </div>
+            </div>
+
+            <div class="size-callouts" id="sizeCallouts"></div>
         </div>
 
         <!-- ANALYSIS TAB -->
@@ -1271,6 +1481,181 @@
             insightsList.innerHTML = insights.map(i => `<li>${i}</li>`).join('');
         }
 
+        // ============ SIZE ANALYSIS TAB ============
+        let currentSizeHorizon = 'all';
+        const SIZE_BUCKETS = [
+            { label: '$2-3', min: 2, max: 3 },
+            { label: '$3-5', min: 3, max: 5 },
+            { label: '$5-8', min: 5, max: 8 },
+            { label: '$8-12', min: 8, max: 12 },
+            { label: '$12+', min: 12, max: Infinity }
+        ];
+
+        function getHorizonTrades(trades, horizon) {
+            if (horizon === 'all') return trades;
+            const hours = { '8h': 8, '24h': 24, '48h': 48 }[horizon];
+            if (!hours || trades.length === 0) return trades;
+            // Use latest trade as reference point
+            let maxTime = 0;
+            trades.forEach(t => {
+                const d = new Date(t.entry_time).getTime();
+                if (d > maxTime) maxTime = d;
+            });
+            const cutoff = maxTime - hours * 3600000;
+            return trades.filter(t => new Date(t.entry_time).getTime() >= cutoff);
+        }
+
+        function computeSizeBuckets(trades) {
+            return SIZE_BUCKETS.map(b => {
+                const bucket = { label: b.label, trades: 0, wins: 0, pnl: 0, totalRisked: 0 };
+                trades.forEach(t => {
+                    const size = parseFloat(t.trade_size) || 0;
+                    if (size >= b.min && size < b.max) {
+                        bucket.trades++;
+                        if (t.is_win === 'TRUE') bucket.wins++;
+                        bucket.pnl += parseFloat(t.realized_pnl) || 0;
+                        bucket.totalRisked += size;
+                    }
+                });
+                bucket.wr = bucket.trades > 0 ? (bucket.wins / bucket.trades * 100) : 0;
+                bucket.avgPnl = bucket.trades > 0 ? bucket.pnl / bucket.trades : 0;
+                bucket.pnlPerDollar = bucket.totalRisked > 0 ? bucket.pnl / bucket.totalRisked : 0;
+                return bucket;
+            });
+        }
+
+        function renderSizeTable(tableId, totalId, buckets) {
+            const tbody = document.querySelector(`#${tableId} tbody`);
+            const tfoot = document.getElementById(totalId);
+            let totalTrades = 0, totalWins = 0, totalPnl = 0, totalRisked = 0;
+            let rows = '';
+            buckets.forEach(b => {
+                totalTrades += b.trades;
+                totalWins += b.wins;
+                totalPnl += b.pnl;
+                totalRisked += b.totalRisked;
+                const wrColor = b.wr >= 55 ? '#00ffa3' : b.wr >= 45 ? '#ffb347' : '#ff4757';
+                const pnlColor = b.pnl >= 0 ? '#00ffa3' : '#ff4757';
+                rows += `<tr>
+                    <td>${b.label}</td>
+                    <td>${b.trades}</td>
+                    <td style="color:${wrColor}">${b.wr.toFixed(1)}%</td>
+                    <td style="color:${pnlColor}">${b.pnl >= 0 ? '+' : ''}$${b.pnl.toFixed(2)}</td>
+                    <td style="color:${b.avgPnl >= 0 ? '#00ffa3' : '#ff4757'}">${b.avgPnl >= 0 ? '+' : ''}$${b.avgPnl.toFixed(3)}</td>
+                    <td style="color:${b.pnlPerDollar >= 0 ? '#00ffa3' : '#ff4757'}">${(b.pnlPerDollar * 100).toFixed(2)}%</td>
+                </tr>`;
+            });
+            tbody.innerHTML = rows;
+            const totWr = totalTrades > 0 ? (totalWins / totalTrades * 100) : 0;
+            const totAvg = totalTrades > 0 ? totalPnl / totalTrades : 0;
+            const totPpd = totalRisked > 0 ? totalPnl / totalRisked : 0;
+            tfoot.innerHTML = `
+                <td><strong>Total</strong></td>
+                <td><strong>${totalTrades}</strong></td>
+                <td><strong>${totWr.toFixed(1)}%</strong></td>
+                <td style="color:${totalPnl >= 0 ? '#00ffa3' : '#ff4757'}"><strong>${totalPnl >= 0 ? '+' : ''}$${totalPnl.toFixed(2)}</strong></td>
+                <td style="color:${totAvg >= 0 ? '#00ffa3' : '#ff4757'}"><strong>${totAvg >= 0 ? '+' : ''}$${totAvg.toFixed(3)}</strong></td>
+                <td style="color:${totPpd >= 0 ? '#00ffa3' : '#ff4757'}"><strong>${(totPpd * 100).toFixed(2)}%</strong></td>`;
+        }
+
+        function updateSizeAnalysis() {
+            const hzTrades = getHorizonTrades(allTrades, currentSizeHorizon);
+            const trades5m = hzTrades.filter(t => t.executor === '5m');
+            const trades15m = hzTrades.filter(t => t.executor === '15m');
+            const buckets5m = computeSizeBuckets(trades5m);
+            const buckets15m = computeSizeBuckets(trades15m);
+
+            renderSizeTable('sizeTable5m', 'sizeTotal5m', buckets5m);
+            renderSizeTable('sizeTable15m', 'sizeTotal15m', buckets15m);
+
+            // Charts
+            const labels = SIZE_BUCKETS.map(b => b.label);
+            const wr5 = buckets5m.map(b => b.wr);
+            const wr15 = buckets15m.map(b => b.wr);
+            const pnl5 = buckets5m.map(b => b.pnl);
+            const pnl15 = buckets15m.map(b => b.pnl);
+
+            if (charts.sizeWr) charts.sizeWr.destroy();
+            if (charts.sizePnl) charts.sizePnl.destroy();
+
+            const wrCtx = document.getElementById('sizeWrChart').getContext('2d');
+            charts.sizeWr = new Chart(wrCtx, {
+                type: 'bar',
+                data: {
+                    labels,
+                    datasets: [
+                        { label: '5m WR%', data: wr5, backgroundColor: '#00ffa3', borderRadius: 4 },
+                        { label: '15m WR%', data: wr15, backgroundColor: '#ffb347', borderRadius: 4 }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { labels: { color: '#888' } },
+                        tooltip: { callbacks: { label: ctx => `${ctx.dataset.label}: ${ctx.parsed.y.toFixed(1)}%` } }
+                    },
+                    scales: {
+                        y: { ticks: { color: '#888', callback: v => v + '%' }, grid: { color: '#1e1e2e' }, suggestedMax: 100 },
+                        x: { ticks: { color: '#888' }, grid: { color: '#1e1e2e' } }
+                    }
+                }
+            });
+
+            const pnlCtx = document.getElementById('sizePnlChart').getContext('2d');
+            charts.sizePnl = new Chart(pnlCtx, {
+                type: 'bar',
+                data: {
+                    labels,
+                    datasets: [
+                        { label: '5m PNL', data: pnl5, backgroundColor: pnl5.map(v => v >= 0 ? '#00ffa3' : '#ff4757'), borderRadius: 4 },
+                        { label: '15m PNL', data: pnl15, backgroundColor: pnl15.map(v => v >= 0 ? '#ffb347' : '#ff4757'), borderRadius: 4 }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { labels: { color: '#888' } },
+                        tooltip: { callbacks: { label: ctx => `${ctx.dataset.label}: $${ctx.parsed.y.toFixed(2)}` } }
+                    },
+                    scales: {
+                        y: { ticks: { color: '#888', callback: v => '$' + v.toFixed(2) }, grid: { color: '#1e1e2e' } },
+                        x: { ticks: { color: '#888' }, grid: { color: '#1e1e2e' } }
+                    }
+                }
+            });
+
+            // Callouts
+            const allBuckets = [...buckets5m.map(b => ({...b, exec: '5m'})), ...buckets15m.map(b => ({...b, exec: '15m'}))];
+            const active = allBuckets.filter(b => b.trades > 0);
+            const callouts = [];
+            if (active.length > 0) {
+                const bestWr = active.reduce((a, b) => b.wr > a.wr ? b : a);
+                callouts.push(`<div class="size-callout" style="border-left:3px solid #00ffa3;"><strong>Highest WR:</strong> ${bestWr.exec} ${bestWr.label} at ${bestWr.wr.toFixed(1)}% (${bestWr.trades} trades)</div>`);
+                const bestPnl = active.reduce((a, b) => b.pnl > a.pnl ? b : a);
+                callouts.push(`<div class="size-callout" style="border-left:3px solid #00ffa3;"><strong>Most Profitable:</strong> ${bestPnl.exec} ${bestPnl.label} with +$${bestPnl.pnl.toFixed(2)}</div>`);
+                const worstPnl = active.reduce((a, b) => b.pnl < a.pnl ? b : a);
+                if (worstPnl.pnl < 0) {
+                    callouts.push(`<div class="size-callout" style="border-left:3px solid #ff4757;"><strong>Biggest Loser:</strong> ${worstPnl.exec} ${worstPnl.label} at -$${Math.abs(worstPnl.pnl).toFixed(2)}</div>`);
+                }
+                const bestEff = active.reduce((a, b) => b.pnlPerDollar > a.pnlPerDollar ? b : a);
+                callouts.push(`<div class="size-callout" style="border-left:3px solid #00ffa3;"><strong>Best Efficiency:</strong> ${bestEff.exec} ${bestEff.label} returning ${(bestEff.pnlPerDollar * 100).toFixed(2)}% per dollar risked</div>`);
+            }
+            document.getElementById('sizeCallouts').innerHTML = callouts.join('');
+        }
+
+        function setupSizeHorizonButtons() {
+            document.querySelectorAll('.size-hz-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    document.querySelectorAll('.size-hz-btn').forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
+                    currentSizeHorizon = btn.dataset.hz;
+                    updateSizeAnalysis();
+                });
+            });
+        }
+
         // ============ ANALYSIS CARDS ============
         function updateAnalysisCards() {
             // Direction Analysis
@@ -1394,6 +1779,7 @@
             updateSlippageChart();
             generateInsights();
             updateAnalysisCards();
+            updateSizeAnalysis();
         }
 
         // ============ FILTER LISTENERS ============
@@ -1441,6 +1827,7 @@
             setupFilters();
             setupTabs();
             setupTableSorting();
+            setupSizeHorizonButtons();
 
             // Auto-refresh every 5 minutes
             setInterval(async () => {
